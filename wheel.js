@@ -69,6 +69,7 @@ export class SpinWheel {
     this.isSpinning = true;
     this.lastTickIndex = -1;
     this.speed = 0.32 + Math.random() * 0.18;
+    if (this.canvas.parentElement) this.canvas.parentElement.classList.add("is-live");
     this.ensureAudio();
     this.animate();
   }
@@ -235,6 +236,7 @@ export class SpinWheel {
   }
 
   determineWinner() {
+    if (this.canvas.parentElement) this.canvas.parentElement.classList.remove("is-live");
     const sliceAngle = (Math.PI * 2) / this.players.length;
     const normalizedAngle = (1.5 * Math.PI - this.angle) % (Math.PI * 2);
     const positiveAngle = normalizedAngle < 0 ? normalizedAngle + Math.PI * 2 : normalizedAngle;

@@ -1,8 +1,8 @@
-import { initTeamPicker, updatePlayersFromWheel } from "./teampicker.js";
-import { initTournament } from "./tournament.js";
-import { SpinWheel, WHEEL_COLORS } from "./wheel.js";
-import { confetti } from "./fx.js";
-import { loadJSON, saveJSON } from "./utils.js";
+﻿import { initTeamPicker, updatePlayersFromWheel } from "./teampicker.js?v=8";
+import { initTournament } from "./tournament.js?v=8";
+import { SpinWheel, WHEEL_COLORS } from "./wheel.js?v=8";
+import { confetti } from "./fx.js?v=8";
+import { loadJSON, saveJSON } from "./utils.js?v=8";
 
 const WHEEL_KEY = "fc26-wheel-state";
 const MUTE_KEY = "fc26-wheel-muted";
@@ -40,7 +40,6 @@ function initWheelUI(tabs) {
   const winnerList = document.getElementById("winner-list");
   const copyOrderBtn = document.getElementById("copy-order-btn");
   const clearWheelBtn = document.getElementById("clear-wheel-btn");
-  const wheelHint = document.getElementById("wheel-hint");
   const modal = document.getElementById("winner-modal");
   const modalName = document.getElementById("modal-winner-name");
   const modalRank = document.getElementById("modal-winner-rank");
@@ -52,6 +51,7 @@ function initWheelUI(tabs) {
     ? saved.players
     : ["Player 1", "Player 2"];
   let results = Array.isArray(saved?.results) ? saved.results : [];
+  let renderedWinners = 0;
   let muted = !!loadJSON(MUTE_KEY);
 
   function persist() {
@@ -62,17 +62,12 @@ function initWheelUI(tabs) {
     if (players.length === 0 && results.length > 0) {
       spinWheelBtn.disabled = true;
       spinWheelBtn.textContent = "All Ranks Assigned";
-      wheelHint.textContent = "Everyone has a spot. Reset the order to run it again.";
     } else if (players.length < 2) {
       spinWheelBtn.disabled = true;
       spinWheelBtn.textContent = "Spin Order";
-      wheelHint.textContent = "Add at least 2 players to spin.";
     } else {
       spinWheelBtn.disabled = false;
       spinWheelBtn.textContent = results.length ? "Spin Next Pick" : "Spin Order";
-      wheelHint.textContent = results.length
-        ? `${results.length} pick${results.length === 1 ? "" : "s"} locked in — ${players.length} left in the wheel.`
-        : "Each spin locks in the next pick. Last player gets the final spot automatically.";
     }
     instantShuffleBtn.disabled = players.length < 2;
     clearPlayersBtn.disabled = players.length === 0 && results.length === 0;
@@ -175,35 +170,70 @@ function initWheelUI(tabs) {
       row.append(dot, input, removeBtn);
       playerInputsContainer.appendChild(row);
     });
+    applyListCap(playerInputsContainer);
     wheel.setPlayers(players);
     updateSpinState();
+  }
+
+  function applyListCap(list) {
+    const rows = list.children;
+    if (getComputedStyle(list).display === "grid") {
+      if (rows.length < 10) {
+        list.style.maxHeight = "";
+        return;
+      }
+      const r0 = rows[0].getBoundingClientRect();
+      const r4 = rows[4].getBoundingClientRect();
+      const stride = r4.top - r0.top;
+      if (!(stride > 0)) return;
+      list.style.maxHeight = `${Math.ceil(stride * 4 + r0.height + 4)}px`;
+      return;
+    }
+    if (rows.length < 6) {
+      list.style.maxHeight = "";
+      return;
+    }
+    const top0 = rows[0].getBoundingClientRect().top;
+    const bottom4 = rows[3].getBoundingClientRect().bottom;
+    if (!(bottom4 - top0 > 0)) return;
+    list.style.maxHeight = `${Math.ceil(bottom4 - top0 + 4)}px`;
   }
 
   function renderOrderList() {
     if (results.length === 0) {
       winnerResults.classList.add("hidden");
+      renderedWinners = 0;
       return;
     }
     winnerResults.classList.remove("hidden");
-    winnerList.innerHTML = "";
-    results.forEach((name, i) => {
+    if (winnerList.children.length !== renderedWinners || renderedWinners > results.length) {
+      winnerList.innerHTML = "";
+      renderedWinners = 0;
+    }
+    const before = renderedWinners;
+    for (let i = before; i < results.length; i++) {
       const row = document.createElement("div");
       row.className = "order-row";
-      row.style.animationDelay = `${i * 0.05}s`;
+      row.style.animationDelay = `${Math.min(i, 20) * 0.05}s`;
       row.innerHTML = `
-        <span class="rank-badge rank-badge--${Math.min(i + 1, 3)}">${i + 1}</span>
+        <span class="order-num">${i + 1}</span>
         <span class="order-name"></span>
-        <span class="order-tag">plays ${ordinal(i + 1)}</span>
       `;
-      row.querySelector(".order-name").textContent = name;
+      if (i >= 3) {
+        const hue = (110 + i * 137.508) % 360;
+        const badge = row.querySelector(".order-num");
+        badge.style.setProperty("--hi", `hsl(${((hue + 14) % 360).toFixed(1)} 90% 76%)`);
+        badge.style.setProperty("--lo", `hsl(${hue.toFixed(1)} 82% 62%)`);
+      }
+      row.querySelector(".order-name").textContent = results[i];
       winnerList.appendChild(row);
-    });
-  }
-
-  function ordinal(n) {
-    const s = ["th", "st", "nd", "rd"];
-    const v = n % 100;
-    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+    }
+    renderedWinners = results.length;
+    applyListCap(winnerList);
+    if (results.length > before) {
+      const orderRows = winnerList.querySelectorAll(".order-row");
+      if (orderRows.length) orderRows[orderRows.length - 1].scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
   }
 
   function addPlayer() {
@@ -212,6 +242,8 @@ function initWheelUI(tabs) {
     quickAddInput.value = "";
     quickAddInput.focus();
     renderRoster();
+    const rows = playerInputsContainer.querySelectorAll(".roster-item");
+    if (rows.length) rows[rows.length - 1].scrollIntoView({ block: "nearest", behavior: "smooth" });
     persist();
   }
 
