@@ -1,6 +1,3 @@
-// utils.js
-export const STORAGE_KEY = "fc26-team-picker-settings";
-
 export function shuffle(array) {
   for (let i = array.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -8,9 +5,9 @@ export function shuffle(array) {
   }
 }
 
-export function loadSettings() {
+export function loadJSON(key) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
     return JSON.parse(raw);
   } catch {
@@ -18,9 +15,17 @@ export function loadSettings() {
   }
 }
 
-export function saveSettings(settings) {
+export function saveJSON(key, value) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // ignore
+  }
+}
+
+export function removeKey(key) {
+  try {
+    localStorage.removeItem(key);
   } catch {
     // ignore
   }

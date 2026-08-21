@@ -1,7 +1,6 @@
-// groups.js
 import { shuffle } from "./utils.js";
 
-export function generateGroups(entries, mode, { homeAndAway = false } = {}) {
+export function generateGroups(entries, mode, { homeAndAway = false, ordered = false } = {}) {
   const n = entries.length;
   if (n === 0) return [];
   let groupCount = (mode === "groups") ? 1 : (n <= 4 ? 1 : Math.max(2, Math.round(n / 4)));
@@ -9,9 +8,9 @@ export function generateGroups(entries, mode, { homeAndAway = false } = {}) {
   for (let i = 0; i < groupCount; i++) {
     groups.push({ id: String.fromCharCode(65 + i), teams: [], matches: [] });
   }
-  const shuffledEntries = [...entries];
-  shuffle(shuffledEntries);
-  shuffledEntries.forEach((e, idx) => groups[idx % groupCount].teams.push(e));
+  const list = [...entries];
+  if (!ordered) shuffle(list);
+  list.forEach((e, idx) => groups[idx % groupCount].teams.push(e));
   groups.forEach(group => group.matches = buildGroupMatches(group.teams, group.id, homeAndAway));
   return groups;
 }
@@ -44,14 +43,28 @@ function buildGroupMatches(teams, groupId, homeAndAway) {
   const firstLegRounds = createRoundRobinRounds(teams);
   firstLegRounds.forEach((round, rIdx) => {
     round.forEach((pair, mIdx) => {
-      matches.push({ id: `G${groupId}-R${rIdx + 1}M${mIdx + 1}`, home: pair.home, away: pair.away, homeGoals: null, awayGoals: null, leg: 1 });
+      matches.push({
+        id: `G${groupId}-R${rIdx + 1}M${mIdx + 1}`,
+        home: pair.home,
+        away: pair.away,
+        homeGoals: null,
+        awayGoals: null,
+        leg: 1
+      });
     });
   });
   if (homeAndAway) {
     const startR = firstLegRounds.length + 1;
     firstLegRounds.forEach((round, rIdx) => {
       round.forEach((pair, mIdx) => {
-        matches.push({ id: `G${groupId}-R${startR + rIdx}M${mIdx + 1}`, home: pair.away, away: pair.home, homeGoals: null, awayGoals: null, leg: 2 });
+        matches.push({
+          id: `G${groupId}-R${startR + rIdx}M${mIdx + 1}`,
+          home: pair.away,
+          away: pair.home,
+          homeGoals: null,
+          awayGoals: null,
+          leg: 2
+        });
       });
     });
   }
@@ -62,104 +75,208 @@ export function computeTable(group) {
   const stats = new Map();
   function ensure(e) {
     if (!stats.has(e.id)) {
-      stats.set(e.id, { playerId: e.id, label: e.team?.name || e.label, played: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, get gd() { return this.gf - this.ga; }, pts: 0 });
+      stats.set(e.id, {
+        playerId: e.id,
+        label: e.team?.name || e.label,
+        played: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0
+      });
     }
     return stats.get(e.id);
   }
   group.matches.forEach(m => {
-    const hg = m.homeGoals; const ag = m.awayGoals;
-    if (hg == null || ag == null || !Number.isInteger(hg) || !Number.isInteger(ag)) return;
-    const h = ensure(m.home); const a = ensure(m.away);
+    const hg = m.homeGoals;
+    const ag = m.awayGoals;
+    if (!Number.isInteger(hg) || !Number.isInteger(ag) || hg < 0 || ag < 0) return;
+    const h = ensure(m.home);
+    const a = ensure(m.away);
     h.played++; a.played++;
-    h.gf += hg; h.ga += ag; a.gf += ag; a.ga += hg;
+    h.gf += hg; h.ga += ag;
+    a.gf += ag; a.ga += hg;
     if (hg > ag) { h.w++; a.l++; h.pts += 3; }
     else if (ag > hg) { a.w++; h.l++; a.pts += 3; }
     else { h.d++; a.d++; h.pts += 1; a.pts += 1; }
   });
   group.teams.forEach(e => ensure(e));
-  return Array.from(stats.values()).sort((a, b) => (b.pts - a.pts) || (b.gd - a.gd) || (b.gf - a.gf) || a.label.localeCompare(b.label));
+  return Array.from(stats.values()).map(s => ({ ...s, gd: s.gf - s.ga }))
+    .sort((a, b) => (b.pts - a.pts) || (b.gd - a.gd) || (b.gf - a.gf) || a.label.localeCompare(b.label));
 }
 
-export function renderGroups(groups, container, mode) {
+function primaryLabel(entry, mode) {
+  return entry.team?.name || entry.label || "";
+}
+
+function secondaryLabel(entry, mode) {
+  if (!entry) return "";
+  if (mode === "teams") return entry.ownerLabel || "";
+  return "";
+}
+
+function fillCell(cell, entry, mode) {
+  cell.innerHTML = '<span class="team-main"></span><span class="team-sub"></span>';
+  const main = cell.querySelector(".team-main");
+  const sub = cell.querySelector(".team-sub");
+  main.textContent = primaryLabel(entry, mode) || "\u2014";
+  const sec = secondaryLabel(entry, mode);
+  sub.textContent = sec;
+  sub.style.display = sec ? "" : "none";
+}
+
+export function renderGroups(groups, container, mode, { onChange = null, highlightQuals = false } = {}) {
   container.innerHTML = "";
+
   groups.forEach(group => {
+    const slot = document.createElement("div");
+    slot.className = "group-slot";
+
     const groupCard = document.createElement("div");
-    groupCard.className = "card";
-    groupCard.style.marginBottom = "24px";
+    groupCard.className = "group-card";
 
-    groupCard.innerHTML = `
-      <div class="card-header">
-        <div class="card-title">GROUP ${group.id}</div>
-      </div>
-      <div class="card-body">
-        <div class="matches-list" style="display: flex; flex-direction: column; gap: 8px"></div>
-        <div class="table-container" style="margin-top: 16px; overflow-x: auto"></div>
-      </div>
-    `;
+    const title = document.createElement("div");
+    title.className = "group-title";
+    title.textContent = `Group ${group.id}`;
+    groupCard.appendChild(title);
 
-    const nextMatches = groupCard.querySelector(".matches-list");
-    group.matches.forEach((match, idx) => {
+    const hasSecondLeg = group.matches.some(m => m.leg === 2);
+    const matchList = document.createElement("div");
+    matchList.className = "match-list";
+
+    const leg1Rounds = hasSecondLeg
+      ? new Set(group.matches.filter(m => m.leg === 1).map(m => m.id.match(/R(\d+)M/)[1])).size
+      : 0;
+
+    let lastSectionKey = "";
+    group.matches.forEach(match => {
+      const roundNum = Number(match.id.match(/R(\d+)M/)[1]);
+      const mdNum = match.leg === 2 ? roundNum - leg1Rounds : roundNum;
+      const sectionKey = `${match.leg}-${mdNum}`;
+      if (sectionKey !== lastSectionKey) {
+        lastSectionKey = sectionKey;
+        const label = document.createElement("div");
+        label.className = "round-label";
+        label.textContent = hasSecondLeg
+          ? `${match.leg === 1 ? "First Leg" : "Second Leg"} \u00b7 Matchday ${mdNum}`
+          : `Matchday ${mdNum}`;
+        matchList.appendChild(label);
+      }
+
       const row = document.createElement("div");
-      row.className = "field-group";
-      row.style.flexDirection = "row";
-      row.style.alignItems = "center";
-      row.style.justifyContent = "space-between";
-      row.style.background = "rgba(15, 23, 42, 0.2)";
-      row.style.padding = "10px 16px";
-      row.style.borderRadius = "12px";
+      row.className = "match-row";
 
-      const homeName = match.home.team?.name || match.home.label;
-      const awayName = match.away.team?.name || match.away.label;
+      const hCell = document.createElement("div");
+      hCell.className = "team-cell";
+      const aCell = document.createElement("div");
+      aCell.className = "team-cell team-cell--right";
 
-      row.innerHTML = `
-        <span style="font-size: 0.9rem; flex: 1; font-weight: 500">${homeName}</span>
-        <div style="display: flex; align-items: center; gap: 8px">
-          <input type="number" min="0" class="score-input home" value="${match.homeGoals ?? ''}" style="width: 50px; text-align: center; padding: 6px">
-          <span style="color: var(--text-dim)">-</span>
-          <input type="number" min="0" class="score-input away" value="${match.awayGoals ?? ''}" style="width: 50px; text-align: center; padding: 6px">
-        </div>
-        <span style="font-size: 0.9rem; flex: 1; text-align: right; font-weight: 500">${awayName}</span>
+      const cluster = document.createElement("div");
+      cluster.className = "score-cluster";
+      cluster.innerHTML = `
+        <input type="number" min="0" inputmode="numeric" class="score-input home" value="${match.homeGoals ?? ""}" aria-label="Home goals">
+        <span class="match-dash">-</span>
+        <input type="number" min="0" inputmode="numeric" class="score-input away" value="${match.awayGoals ?? ""}" aria-label="Away goals">
       `;
 
-      const hInput = row.querySelector(".home");
-      const aInput = row.querySelector(".away");
+      row.append(hCell, cluster, aCell);
+
+      if (hasSecondLeg && match.leg === 2) {
+        const legChip = document.createElement("span");
+        legChip.className = "leg-chip";
+        legChip.textContent = "2nd leg";
+        row.appendChild(legChip);
+      }
+
+      matchList.appendChild(row);
+
+      fillCell(hCell, match.home, mode);
+      fillCell(aCell, match.away, mode);
+
+      const hInput = cluster.querySelector(".home");
+      const aInput = cluster.querySelector(".away");
       const update = () => {
         match.homeGoals = hInput.value === "" ? null : parseInt(hInput.value);
         match.awayGoals = aInput.value === "" ? null : parseInt(aInput.value);
         renderTable();
+        if (onChange) onChange();
       };
       hInput.addEventListener("input", update);
       aInput.addEventListener("input", update);
-      nextMatches.appendChild(row);
     });
 
-    const tableContainer = groupCard.querySelector(".table-container");
+    groupCard.appendChild(matchList);
+
+    const tableWrap = document.createElement("div");
+    tableWrap.className = "standings-wrap";
+    groupCard.appendChild(tableWrap);
+
+    const entryById = new Map();
+    group.teams.forEach(e => entryById.set(e.id, e));
+
     const renderTable = () => {
       const stats = computeTable(group);
-      tableContainer.innerHTML = `
-        <table style="width: 100%; border-collapse: separate; border-spacing: 0 4px; font-size: 0.85rem">
+      tableWrap.innerHTML = `
+        <div class="standings-title">Table</div>
+        <table class="standings">
           <thead>
-            <tr style="color: var(--text-dim); text-transform: uppercase; font-size: 0.75rem">
-              <th style="text-align: left; padding: 8px">Club</th>
-              <th style="padding: 8px">P</th>
-              <th style="padding: 8px">GD</th>
-              <th style="padding: 8px">Pts</th>
+            <tr>
+              <th class="pos">#</th>
+              <th class="club">Club</th>
+              <th>P</th>
+              <th>W</th>
+              <th>D</th>
+              <th>L</th>
+              <th>GD</th>
+              <th>Pts</th>
             </tr>
           </thead>
-          <tbody>
-            ${stats.map(s => `
-              <tr style="background: rgba(255,255,255,0.03); border-radius: 8px">
-                <td style="padding: 10px; border-radius: 8px 0 0 8px; font-weight: 600">${s.label}</td>
-                <td style="text-align: center; padding: 10px">${s.played}</td>
-                <td style="text-align: center; padding: 10px; color: ${s.gd > 0 ? 'var(--success)' : s.gd < 0 ? 'var(--danger)' : 'inherit'}">${s.gd > 0 ? '+' + s.gd : s.gd}</td>
-                <td style="text-align: center; padding: 10px; border-radius: 0 8px 8px 0; font-weight: 800; color: var(--primary)">${s.pts}</td>
-              </tr>
-            `).join('')}
-          </tbody>
+          <tbody></tbody>
         </table>
       `;
+      const tbody = tableWrap.querySelector("tbody");
+      stats.forEach((s, idx) => {
+        const tr = document.createElement("tr");
+        if (highlightQuals && idx < 2) tr.classList.add("qualifies");
+
+        const tdPos = document.createElement("td");
+        tdPos.className = "pos";
+        tdPos.textContent = idx + 1;
+
+        const tdClub = document.createElement("td");
+        const cell = document.createElement("div");
+        cell.className = "team-cell";
+        const main = document.createElement("span");
+        main.className = "team-main";
+        main.textContent = s.label;
+        cell.appendChild(main);
+        const entry = entryById.get(s.playerId);
+        const sec = entry ? secondaryLabel(entry, mode) : "";
+        if (sec) {
+          const sub = document.createElement("span");
+          sub.className = "team-sub";
+          sub.textContent = sec;
+          cell.appendChild(sub);
+        }
+        tdClub.appendChild(cell);
+
+        tr.append(tdPos, tdClub);
+
+        const tdP = document.createElement("td"); tdP.textContent = s.played;
+        const tdW = document.createElement("td"); tdW.textContent = s.w;
+        const tdD = document.createElement("td"); tdD.textContent = s.d;
+        const tdL = document.createElement("td"); tdL.textContent = s.l;
+        const gdCls = s.gd > 0 ? "gd-pos" : s.gd < 0 ? "gd-neg" : "";
+        const tdGd = document.createElement("td");
+        tdGd.className = gdCls;
+        tdGd.textContent = s.gd > 0 ? "+" + s.gd : s.gd;
+        const tdPts = document.createElement("td");
+        tdPts.className = "pts";
+        tdPts.textContent = s.pts;
+
+        tr.append(tdP, tdW, tdD, tdL, tdGd, tdPts);
+        tbody.appendChild(tr);
+      });
     };
     renderTable();
-    container.appendChild(groupCard);
+
+    slot.appendChild(groupCard);
+    container.appendChild(slot);
   });
 }

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -10,6 +10,7 @@
   <link rel="icon"
     href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23d7ff3e'/%3E%3Ctext x='32' y='42' font-family='Arial Black,sans-serif' font-size='24' font-weight='900' text-anchor='middle' fill='%230a0f1a'%3EFC%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="style.css" />
+  <script>window.__errs=[];window.addEventListener("error",e=>window.__errs.push(e.message+"@"+e.lineno));window.__setStacks=[];(function(){var o=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(k==="fc26-last-session"){try{throw new Error("t")}catch(e){window.__setStacks.push(String(e.stack||"").split("\n").slice(1,4).join(" | "))}}return o.call(this,k,v)}})();</script>
 </head>
 
 <body>
@@ -236,6 +237,7 @@
           <div id="groups-container" class="groups-grid"></div>
           <div id="groups-footer" class="groups-footer hidden">
             <button type="button" id="draw-knockout-btn" class="btn-primary">Draw Knockout From Standings</button>
+            <p class="hint">Top two of each group cross over: A1 vs B2, B1 vs A2.</p>
           </div>
         </div>
       </section>
@@ -268,6 +270,173 @@
   <canvas id="confetti-canvas"></canvas>
 
   <script type="module" src="main.js"></script>
+  <script>
+    (function () {
+      const params = new URLSearchParams(location.search);
+      const mode = params.get("mode") || "groups-knockout";
+      const teams = ["Manchester United", "Arsenal", "Aston Villa", "Chelsea", "Liverpool", "Tottenham", "Newcastle", "Brighton"];
+      function mkTeam(i) { return { id: "t" + i, name: teams[i], leagueId: "L1", leagueName: "Premier League", stars: i % 2 ? 4.5 : 5, logo: "" }; }
+      const assignments = [0,1,2,3,4,5,6,7].map(i => ({ id: i + 1, label: "Player " + (i + 1), team: mkTeam(i), allTeams: [mkTeam(i)], isLocked: false }));
+
+      if (params.get("scenario") === "spin") {
+        localStorage.setItem("fc26-last-session", JSON.stringify({ labels: [], assignments: [] }));
+      } else if (params.get("scenario") === "mismatch") {
+        const oldOrder = [assignments[2], assignments[1], assignments[0], assignments[3]];
+        localStorage.setItem("fc26-last-session", JSON.stringify({
+          labels: ["Player 4", "Player 1", "Player 2", "Player 3"],
+          assignments: oldOrder
+        }));
+      } else {
+        localStorage.setItem("fc26-last-session", JSON.stringify({ labels: [], assignments }));
+      }
+      localStorage.removeItem("fc26-cup-state");
+
+      window.addEventListener("load", () => {
+        setTimeout(() => {
+          try {
+            if (params.get("scenario") === "mismatch" || params.get("scenario") === "reroll") {
+              document.querySelector("button[data-tab='picker']").click();
+              if (params.get("scenario") === "reroll") {
+                setTimeout(() => {
+                  const cards0 = [...document.querySelectorAll("#results .fut-card")];
+                  cards0.forEach((c, i) => { c.dataset.tag = String(i); });
+                  cards0[1].querySelector(".reroll-btn").click();
+                  document.title = "PREVIEW_READY";
+                }, 500);
+              } else {
+                document.title = "PREVIEW_READY";
+              }
+            } else if (params.get("scenario") === "wheel") {
+              setTimeout(() => {
+                const c = document.getElementById("wheel-canvas");
+                const blank = cv => {
+                  if (!cv.width || !cv.height) return true;
+                  const d = cv.getContext("2d").getImageData(0, 0, cv.width, cv.height).data;
+                  for (let i = 3; i < d.length; i += 388) { if (d[i] !== 0) return false; }
+                  return true;
+                };
+                window.__wheel = {
+                  w0: c.width,
+                  blank0: blank(c),
+                  w1: null,
+                  blank1: null
+                };
+                document.querySelector("button[data-tab='picker']").click();
+                window.dispatchEvent(new Event("resize"));
+                setTimeout(() => {
+                  document.querySelector("button[data-tab='wheel']").click();
+                  setTimeout(() => {
+                    window.__wheel.w1 = c.width;
+                    window.__wheel.blank1 = blank(c);
+                    document.title = "PREVIEW_READY";
+                  }, 250);
+                }, 250);
+              }, 400);
+            } else if (params.get("scenario") === "spin") {
+              document.querySelector("button[data-tab='picker']").click();
+              setTimeout(() => {
+                window.__t0 = performance.now();
+                const obs = new MutationObserver(() => {
+                  if (document.querySelectorAll("#results .fut-card").length > 0) {
+                    window.__genMs = Math.round(performance.now() - window.__t0);
+                    obs.disconnect();
+                  }
+                });
+                obs.observe(document.getElementById("results"), { childList: true, subtree: true });
+                document.getElementById("generate-btn").click();
+                setTimeout(() => { if (window.__genMs === undefined) window.__genMs = -1; }, 400);
+                document.title = "PREVIEW_READY";
+              }, 500);
+            } else {
+              document.querySelector("button[data-tab='tournament']").click();
+              if (mode !== "knockout") document.querySelector("input[name='tournament-type'][value='" + mode + "']").click();
+              if (params.get("doubleleg")) document.getElementById("groups-home-away").click();
+              document.getElementById("tournament-use-last").click();
+              setTimeout(() => {
+                const scope = mode === "knockout" ? "#knockout-container" : "#groups-container";
+                document.querySelectorAll(scope + " .score-input").forEach((inp, i) => {
+                  inp.value = String((i * 7) % 5);
+                  inp.dispatchEvent(new Event("input", { bubbles: true }));
+                });
+                if (mode === "groups-knockout") document.getElementById("draw-knockout-btn").click();
+                document.title = "PREVIEW_READY";
+              }, 400);
+            }
+
+            setTimeout(() => {
+              const probe = [];
+              probe.push("errs=" + JSON.stringify(window.__errs));
+              probe.push("setStacks=" + (window.__setStacks || []).join(" ~~ "));
+      if (params.get("scenario") === "mismatch" || params.get("scenario") === "reroll") {
+                const cards = [...document.querySelectorAll("#results .fut-card")];
+                probe.push("chips=" + cards.map(c => c.querySelector(".fut-rank-chip").textContent).join("|"));
+                probe.push("players=" + cards.map(c => c.querySelector(".fut-owner").textContent.trim()).join("|"));
+                probe.push("clubs=" + cards.map(c => c.querySelector(".fut-team").textContent).join("|"));
+                const imgs = [...document.querySelectorAll("#results .fut-crest")];
+                probe.push("imgs dataUri=" + imgs.filter(i => i.src.startsWith("data:")).length + "/" + imgs.length + " http=" + imgs.filter(i => i.src.startsWith("http")).length);
+                if (cards[0]) {
+                  const crestR = cards[0].querySelector(".fut-crest").getBoundingClientRect();
+                  const chipR = cards[0].querySelector(".fut-rank-chip").getBoundingClientRect();
+                  probe.push("chipOverCrest=" + (chipR.right > crestR.left && chipR.left < crestR.right && chipR.top < crestR.bottom && chipR.bottom > crestR.top));
+                  const fb = cards.slice(0, 2).map(c => Math.round(c.querySelector(".fut-footer").getBoundingClientRect().bottom));
+                  probe.push("footerBottoms=" + fb.join("|"));
+                  probe.push("ownerBg=" + getComputedStyle(cards[0].querySelector(".fut-owner")).backgroundColor);
+                }
+                probe.push("cupChips=" + document.getElementById("participant-preview").innerText.replace(/\s+/g, "|"));
+              }
+              if (params.get("scenario") === "reroll") {
+                const cards2 = [...document.querySelectorAll("#results .fut-card")];
+                probe.push("tagsKept=" + cards2.map(c => c.dataset.tag || "NEW").join("|"));
+                probe.push("clubsAfter=" + cards2.map(c => c.querySelector(".fut-team").textContent).join("|"));
+                probe.push("playersAfter=" + cards2.map(c => c.querySelector(".fut-owner").textContent.trim()).join("|"));
+                probe.push("chipsAfter=" + cards2.map(c => c.querySelector(".fut-rank-chip").textContent).join("|"));
+              }
+              if (params.get("scenario") === "wheel") {
+                const w = window.__wheel || {};
+                probe.push("wheelW0=" + w.w0 + " blank=" + w.blank0);
+                probe.push("wheelW1=" + w.w1 + " blank=" + w.blank1);
+                probe.push("wheelOk=" + (w.w1 > 0 && w.blank1 === false));
+              }
+              if (params.get("scenario") === "spin") {
+                probe.push("genMs=" + window.__genMs);
+                probe.push("cardsAfterSpin=" + document.querySelectorAll("#results .fut-card").length);
+                probe.push("btnText=" + document.getElementById("generate-btn").textContent);
+              } else if (!params.get("scenario")) {
+                probe.push("setupCollapsed=" + document.getElementById("cup-setup-card").classList.contains("is-collapsed"));
+                probe.push("slots=" + document.querySelectorAll("#groups-container .group-slot").length);
+                probe.push("bracketCols=" + document.querySelectorAll("#knockout-container .bracket-col").length);
+                const tm = document.querySelector("#groups-container .team-main");
+                if (tm) probe.push("nameClamp=" + getComputedStyle(tm).webkitLineClamp);
+                probe.push("cupChips=" + document.getElementById("participant-preview").innerText.replace(/\s+/g, "|").slice(0, 60));
+                const pp = document.getElementById("participant-preview");
+                probe.push("chipsFlex=" + (pp ? getComputedStyle(pp).display : "n/a"));
+                probe.push("chipsOverflow=" + (pp ? pp.scrollWidth > pp.clientWidth + 1 : "n/a"));
+                const mr = document.querySelector(".match-row, .tie-leg");
+                if (mr) {
+                  probe.push("matchCols=" + getComputedStyle(mr).gridTemplateColumns.split(" ").length);
+                  probe.push("matchOverflow=" + (mr.scrollWidth > mr.clientWidth + 1));
+                  const hC = mr.querySelector(".team-cell:not(.team-cell--right)");
+                  const aC = mr.querySelector(".team-cell--right");
+                  const shI = mr.querySelector(".score-input.home, .score-input.h");
+                  const saI = mr.querySelector(".score-input.away, .score-input.a");
+                  if (hC && aC && shI && saI) {
+                    const cy = el => { const r = el.getBoundingClientRect(); return Math.round(r.top + r.height / 2); };
+                    probe.push("scoreAlign=" + (Math.abs(cy(hC) - cy(shI)) <= 9) + "|" + (Math.abs(cy(aC) - cy(saI)) <= 9));
+                  }
+                }
+              }
+              probe.push("bodyOverflowX=" + (document.documentElement.scrollWidth > document.documentElement.clientWidth));
+              let pre = document.getElementById("__probe");
+              if (!pre) { pre = document.createElement("pre"); pre.id = "__probe"; document.body.appendChild(pre); }
+              pre.textContent = "PROBE_START\n" + probe.join("\n") + "\nPROBE_END";
+            }, params.get("scenario") === "reroll" ? 1700 : params.get("scenario") === "spin" ? 1100 : params.get("scenario") === "wheel" ? 1500 : params.get("scenario") ? 600 : 900);
+          } catch (e) {
+            document.title = "ERR: " + e.message;
+          }
+        }, 300);
+      });
+    })();
+  </script>
 </body>
 
 </html>
