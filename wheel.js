@@ -227,10 +227,10 @@ export class SpinWheel {
     ctx.stroke();
 
     ctx.fillStyle = "#d7ff3e";
-    ctx.font = "800 15px 'Saira Condensed', Outfit";
+    ctx.font = "800 12px 'Saira Condensed', Outfit";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("FC26", centerX, centerY + 1);
+    ctx.fillText("YALLASPIN", centerX, centerY + 1);
     ctx.textBaseline = "alphabetic";
   }
 
