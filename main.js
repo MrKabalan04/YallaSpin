@@ -241,6 +241,12 @@ function initWheelUI(tabs) {
     players.push(name.slice(0, 24));
     quickAddInput.value = "";
     quickAddInput.focus();
+    if (players.length === 1 && results.length > 0) {
+      results = [];
+      renderedWinners = 0;
+      winnerList.innerHTML = "";
+      winnerResults.classList.add("hidden");
+    }
     renderRoster();
     const rows = playerInputsContainer.querySelectorAll(".roster-item");
     if (rows.length) rows[rows.length - 1].scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -261,7 +267,7 @@ function initWheelUI(tabs) {
       const j = Math.floor(Math.random() * (i + 1));
       [players[i], players[j]] = [players[j], players[i]];
     }
-    results.push(...players);
+    results = [...players];
     players = [];
     wheel.setPlayers([]);
     renderOrderList();
@@ -304,7 +310,7 @@ function initWheelUI(tabs) {
   });
 
   clearWheelBtn.addEventListener("click", () => {
-    players = results;
+    players = [...results];
     results = [];
     renderRoster();
     renderOrderList();

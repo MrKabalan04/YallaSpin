@@ -32,6 +32,11 @@
   font-family: var(--font-body);
 }
 
+html,
+body {
+  overflow-x: clip;
+}
+
 html {
   scrollbar-gutter: stable;
 }
@@ -758,7 +763,7 @@ button:disabled {
 
 .order-list {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 160px), 1fr));
   gap: 10px;
   max-height: 420px;
   overflow-y: auto;
@@ -771,6 +776,7 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
   padding: 10px 12px;
   background: rgba(5, 7, 13, 0.5);
   border: 1px solid var(--line);
@@ -819,6 +825,10 @@ button:disabled {
   font-weight: 600;
   font-size: 0.95rem;
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .order-actions {
@@ -1932,9 +1942,23 @@ button:disabled {
     font-size: 1.25rem;
   }
 
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow-x: visible;
+  }
+
   .tabs button {
-    padding: 10px 14px;
-    font-size: 0.9rem;
+    min-width: 0;
+    padding: 10px 6px;
+    font-size: 0.84rem;
+    gap: 6px;
+  }
+
+  .tab-step {
+    width: 18px;
+    height: 18px;
+    font-size: 0.62rem;
   }
 
   #spin-wheel-btn {
@@ -1944,6 +1968,45 @@ button:disabled {
 
   .wheel-controls {
     width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .icon-toggle {
+    flex: 1;
+  }
+
+  .order-list {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 148px), 1fr));
+  }
+
+  .roster-actions,
+  .order-actions {
+    flex-wrap: wrap;
+  }
+
+  .quick-add {
+    flex-direction: column;
+  }
+
+  .quick-add button {
+    width: 100%;
+  }
+
+  .actions-row button,
+  .order-actions button {
+    flex: 1 1 100%;
+  }
+
+  .fut-footer {
+    flex-wrap: wrap;
+  }
+
+  .fut-footer button {
+    flex: 1 1 100%;
+  }
+
+  .standings {
+    font-size: 0.78rem;
   }
 
   .modal-content {
@@ -2187,7 +2250,7 @@ button:active:not(:disabled) {
 .wheel-canvas-wrap::after {
   content: "";
   position: absolute;
-  inset: -14px;
+  inset: -14px 0;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(215, 255, 62, 0) 58%, rgba(215, 255, 62, 0.16) 74%, transparent 78%);
   opacity: 0.45;
